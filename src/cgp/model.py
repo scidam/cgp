@@ -5,7 +5,7 @@ Created Date: Sunday March 28th 2021
 Author: Dmitry Kislov
 E-mail: kislov@easydan.com
 -----
-Last Modified: Wednesday, April 28th 2021, 10:27:12 am
+Last Modified: Wednesday, April 28th 2021, 12:37:33 pm
 Modified By: Dmitry Kislov
 -----
 Copyright (c) 2021
@@ -14,9 +14,10 @@ Copyright (c) 2021
 
 from __future__ import annotations
 from .bases import (AbstractNode, AbstractPhenotype, AbstractConfig,
-                    AbstractGrid)
+                    AbstractGrid, AbstractEvolution)
 from dataclasses import dataclass, field
-from typing import Any, List, Union, Tuple, Iterable, Optional
+from typing import (Any, List, Union, Tuple, Iterable, Optional,
+                    Callable)
 import operator
 import logging
 import random
@@ -32,16 +33,17 @@ __license__ = "MIT"
 _logger = logging.getLogger(__name__)
 
 
-def _get_function_arity(f) -> int:
+def _get_function_arity(f: Callable[..., Any]) -> int:
     if hasattr(f, 'arity'):
-        return f.arity
+        return getattr(f, 'arity')
     for par in inspect.signature(f).parameters.values():
         if par.kind not in [
             inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.VAR_POSITIONAL,
             inspect.Parameter.POSITIONAL_OR_KEYWORD
         ]:
-            raise TypeError("Node function should have only positional arguments.")
+            raise TypeError("Node function should have only"
+                            " positional arguments.")
         elif par.kind == inspect.Parameter.VAR_POSITIONAL:
             return -1
     return len(inspect.signature(f).parameters)
@@ -119,15 +121,17 @@ class FunctionNode(AbstractNode):
             setattr(self.function, 'arity', _get_function_arity(self.function))
 
     @property
-    def short_repr(self):
+    def short_repr(self) -> str:
+        """ Returns a string:  short representation of the functional node """
+
         if hasattr(self.function, 'short_repr'):
-            return self.function.short_repr
+            return getattr(self.function, 'short_repr')
         else:
             # inspecting source code and  trying to
             # build its short representation
             src, _ = inspect.getsourcelines(self.function)
-            src = src[-1].strip().replace('return ', '')
-            match = re.findall(r".*lambda.*\:(.*)\s?\)?\s?$", src)
+            src_stripped = src[-1].strip().replace('return ', '')
+            match = re.findall(r".*lambda.*\:(.*)\s?\)?\s?$", src_stripped)
             if match:
                 result = match[-1].strip()
             else:
@@ -135,6 +139,12 @@ class FunctionNode(AbstractNode):
             return result
 
     def evaluate(self) -> Any:
+        """ Evalute value associated with the node.
+
+        It recursively invokes `.evaluate` method in input nodes.
+        However, if value at the node was already computed,
+        it just returned it (i.e. without recursive evaluation).
+        """
         if self.evaluated:
             return self.output
         args = []
@@ -149,6 +159,8 @@ class FunctionNode(AbstractNode):
 
     @property
     def input_size(self):
+        """ Returns the number of inputs for functional node """
+
         return len(self.inputs)
 
 
@@ -168,7 +180,9 @@ class Config(AbstractConfig):
         else:
             handler = logging.StreamHandler(sys.stdout)
 
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(message)s'
+        )
         handler.setFormatter(formatter)
         _logger.addHandler(handler)
 
@@ -178,18 +192,17 @@ class Config(AbstractConfig):
             self.level_back = self.pool_shape[1] - 1
         if self.conn_mutation_rate >= 1.0 or self.conn_mutation_rate < 0.0:
             raise\
-                ValueError("Connection mutation rate doesn't belong to [0, 1).")
+                ValueError("Connection mutation rate is not in [0, 1).")
         if self.func_mutation_rate >= 1.0 or self.func_mutation_rate < 0.0:
             raise\
-                ValueError("Function mutation rate doesn't belong to [0, 1).")
+                ValueError("Function mutation rate is not in [0, 1).")
         if self.output_mutation_rate >= 1.0 or\
                 self.output_mutation_rate < 0.0:
-            raise ValueError("Output mutation rate doesn't belong to [0, 1).")
+            raise ValueError("Output mutation rate is not in [0, 1).")
         if self.level_back < 0:
             raise IndexError("Level-back attribute should be non-negative 0. "
                              f"level_back = {self.level_back}.")
         _assign_function_arities(self.function_table)
-
 
     @property
     def size(self) -> int:
@@ -257,11 +270,14 @@ class Phenotype(AbstractPhenotype, GridMixin):
 
     @property
     def active_func_nodes(self) -> List[FunctionNode]:
+        """ Returns nodes marked as `active` (i.e. used in computations) """
         if not all(map(operator.attrgetter('visited'), self.outputs)):
             self.refresh_node_states()
         return list(filter(operator.attrgetter('active'), self.pool))
 
     def output_mutate(self) -> None:
+        """ Apply random mutations to output nodes """
+
         to_mutate = int(
             self.config.output_size * self.config.output_mutation_rate
         )
@@ -281,6 +297,10 @@ class Phenotype(AbstractPhenotype, GridMixin):
                          " nothing to mutate.")
 
     def func_mutate(self) -> None:
+        """ Apply random mutations to functional nodes.
+
+        Mutations are applied to functions used in active nodes.
+        """
         to_mutate = int(len(self.active_func_nodes) *
                         self.config.func_mutation_rate)
         if to_mutate > 0:
@@ -300,6 +320,8 @@ class Phenotype(AbstractPhenotype, GridMixin):
                          " nothing to mutate.")
 
     def pool_mutate(self) -> None:
+        """ Mutate connections between functional nodes """
+
         total_conns = sum(map(operator.attrgetter('input_size'),
                               self.pool))
         to_mutate = int(total_conns * self.config.conn_mutation_rate)
@@ -350,10 +372,8 @@ class Phenotype(AbstractPhenotype, GridMixin):
                         len_i2 = len(node2.inputs)
                         i1 = random.randint(0, len_i1 - 1)
                         i2 = random.randint(0, len_i2 - 1)
-                        #plotter.grid_plot(self, filename=f"trav-{n_mut}-{cnt}-bra.pdf")
                         node1.inputs[i1] = random.choice(filtered_i2)
                         node2.inputs[i2] = random.choice(filtered_i1)
-                        #plotter.grid_plot(self, filename=f"trav-{n_mut}-{cnt}-ra.pdf")
                         self.refresh_node_states()
                         n_mut += 2
                         done = True
@@ -361,12 +381,13 @@ class Phenotype(AbstractPhenotype, GridMixin):
                 # ---------- change function arguments order ---------
                 if self.active_func_nodes:
                     node1 = random.choice(self.active_func_nodes)
-                    if node1.function.arity > 1 or node1.function.arity == -1:  # type: ignore   # noqa: E501
+                    if getattr(node1.function, 'arity') > 1\
+                            or getattr(node1.function, 'arity') == -1:
                         random.shuffle(node1.inputs)
                         if not done:
                             self.reset_eval_statuses(node1)
                         n_mut += 1
-                        #plotter.grid_plot(self, filename=f"trav-{n_mut}-fa.pdf")
+
                 # --------------- make node active -------------------
                 na_nodes = list(filter(lambda x: x.active is False, self.pool))
                 if na_nodes:
@@ -394,8 +415,9 @@ class Phenotype(AbstractPhenotype, GridMixin):
                         self.reset_eval_statuses(na_node)
                     n_mut += 1
                     if not self.is_traversable:
-                        _logger.error("Phenotype became not traversable during mutation."
-                                      "This is unexpected behavior...")
+                        _logger.error(
+                            "Phenotype became not traversable during mutation."
+                            "This is unexpected behavior...")
                         raise Exception("Something went wrong...")
             if done:
                 self.reset_eval_statuses()
@@ -432,8 +454,14 @@ class Phenotype(AbstractPhenotype, GridMixin):
 
     @property
     def is_traversable(self) -> bool:
+        """ Check if the graph is traversable.
 
-        def _traverse(node: Union[InputNode, FunctionNode, OutputNode]) -> bool:
+        There is a path between inputs through the graph.
+        """
+
+        def _traverse(node: Union[InputNode,
+                                  FunctionNode,
+                                  OutputNode]) -> bool:
             if not isinstance(node, InputNode) and not node.inputs:
                 node.visited = True
                 node.active = False
@@ -452,10 +480,13 @@ class Phenotype(AbstractPhenotype, GridMixin):
         return all(statuses)
 
     def refresh_node_states(self) -> None:
+        """ Update `active` node flags for the entire graph """
         self._require_traverse()
         self.is_traversable
 
     def update_inputs(self, inputs: List[Any]) -> None:
+        """Assign values to input nodes """
+
         for k in range(len(inputs)):
             if isinstance(inputs[k], Iterable):
                 if any(self.inputs[k].inputs[0] != inputs[k]):
@@ -510,9 +541,13 @@ class Phenotype(AbstractPhenotype, GridMixin):
         return [node.inputs[0].evaluate() for node in self.outputs]
 
     def clone(self) -> Phenotype:
+        """ Make a copy of a phenotype """
         return deepcopy(self)
 
     def random_init(self) -> None:
+        """ Generate random phenotype using configuration
+        parameters in `config` attribute.
+        """
 
         # initialize input nodes
         self.inputs = []
@@ -548,7 +583,7 @@ class Phenotype(AbstractPhenotype, GridMixin):
                         self.pool[k + node_index].function
                     )
                     if arity == -1:
-                        arity = random.randint( # FIXME: ? hardcoded values ?
+                        arity = random.randint(  # FIXME: ? hardcoded values ?
                             0,
                             min(len(allowed_nodes) // 2, 4) + 1
                         )
@@ -576,10 +611,18 @@ class Phenotype(AbstractPhenotype, GridMixin):
 
 
 @dataclass
-class Evolution:
+class Evolution(AbstractEvolution):
+    # all phenotypes used in evolution process
     population: List[Phenotype] = field(default_factory=list)
+
+    # configuration parameters used during evolution
     config: Config = field(default_factory=Config)
+
+    # automaticaly build init population
     init_population: bool = False
+
+    # history of already evaluated phenotypes (novelty function values)
+    # that were excluded at some evolutionary step
     history: set = field(default_factory=set)
 
     def __post_init__(self) -> None:
@@ -590,14 +633,16 @@ class Evolution:
                              "Define metric function and run again.")
         if self.config.select_criterion is None:
             self.config.select_criterion = lambda *x: False
-            _logger.warning("The select_criterion function is not defined."
-                         "Use always `False` function. Define select_criterion"
-                         "and start the evolution again.")
+            _logger.warning(
+                "The select_criterion function is not defined."
+                "Use always `False` function. Define select_criterion"
+                "and start the evolution again.")
         if self.config.stop_criterion is None:
             self.config.stop_criterion = lambda *x: True
-            _logger.warning("The stop_criterion function is not defined."
-                         "Use always `True` function. Define stop_criterion"
-                         "and start the evolution again.")
+            _logger.warning(
+                "The stop_criterion function is not defined."
+                "Use always `True` function. Define stop_criterion"
+                " and start the evolution again.")
 
     def get_random_phenotype(self) -> Phenotype:
         """Initialize random instance of Phenotype class
@@ -679,7 +724,8 @@ class Evolution:
         selected = []
         for phenotype in self.population:
             try:
-                select = self.config.select_criterion(phenotype, self.population)
+                select = self.config.select_criterion(phenotype,
+                                                      self.population)
             except Exception as exc:
                 _logger.error(
                     f"Exception raised when executing `select` method: {exc}"
@@ -703,6 +749,8 @@ class Evolution:
         return False
 
     def extend_if_novel(self, ext: List[Phenotype]) -> int:
+        """ Extend population pool with novel phenotypes """
+
         cnt = 0
         for p in ext:
             if self.append_if_novel(p):
@@ -710,6 +758,8 @@ class Evolution:
         return cnt
 
     def append_if_novel(self, phenotype: Phenotype) -> bool:
+        """ Append phenotype to the population if it is novel """
+
         novelty = self.config.novelty_function(phenotype)
         if novelty not in self.history:
             self.population.append(phenotype)
@@ -722,6 +772,11 @@ class Evolution:
             self.history.add(self.config.novelty_function(p))
 
     def rectify_population(self) -> None:
+        """ Checks population for consistency.
+
+        Appends random phenotypesm if needed. Adds new randomly generated
+        phenotypes.
+        """
         metrics = []
         selected = []
         for p in self.population:
@@ -731,16 +786,14 @@ class Evolution:
             except Exception as exc:
                 _logger.error(f"Exception raised: {exc}")
         rectified = []
-        # print("Metrics to be rectivied: ", Counter(metrics))
-        # print(f"Len before rectification {len(selected)}")
+
         for val in set(metrics):
             candidates = [p for p, v in zip(selected, metrics) if v == val]
             if len(candidates) > 2:
                 rectified.append(random.choice(candidates))
             else:
                 rectified += candidates
-        # print(f"Len after rectification {len(rectified)}")
-        # ----- add random phenotypes which can be treated as <novel>
+
         self.population = rectified
         cnt = 0
         while len(self.population) < self.config.max_population_size:
@@ -748,19 +801,19 @@ class Evolution:
             self.append_if_novel(self.get_random_phenotype())
             if cnt % 1000 == 0:
                 _logger.info(
-                    f"Searching for novel phenotypes. Iterations passed: {cnt}."
+                    f"Searching for novel phenotypes. # of iterations: {cnt}."
                 )
-        # print(f"Refill population: {len(self.population)}")
 
     def run(self, nmax: int = 100) -> Tuple[Phenotype, Any]:
+        """ Runs evolution process until desired condition is met or
+        max iterations is reached.
+        """
+
         n = 0
         nmax = min(nmax, self.config.max_iterations)
         while n < nmax and not self.stop_condition():
-            # print(f"Population size: {len(self.population)}")
-            # print(f"{Counter(map(metric, self.population))}")
             selected = self.select()
             s = len(selected)
-            # print(f"Selected only; {s}")
             new_children = []
             while s < self.config.max_population_size:
                 # preform crossover
@@ -779,22 +832,16 @@ class Evolution:
                 new_children.append(child)
                 s += 1
             p, best = self.get_best_solution()
-            # print(f"Selected: {len(selected)} ")
             history = [p for p in self.population
                        if p not in selected and self.config.metric(p) > best]
             self.append_to_history(history)
             self.population = selected[:]
-            # num = self.extend_if_novel(new_children)
-            # print(f"New phenotypes added: {num}")
             self.rectify_population()
-
-            # print(f"""{n}: Population size: {len(self.population)}.
-            #       History size: {len(self.history)};
-            #       best: {self.get_best_solution(metric)[1]}""")
             n += 1
         return self.get_best_solution()
 
     def get_best_solution(self) -> Tuple[Phenotype, float]:
+        """ Returns the best phenotype from the population """
 
         results = []
         for phenotype in self.population:

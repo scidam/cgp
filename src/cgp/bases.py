@@ -5,7 +5,7 @@ Created Date: Sunday March 28th 2021
 Author: Dmitry Kislov
 E-mail: kislov@easydan.com
 -----
-Last Modified: Wednesday, April 28th 2021, 11:02:25 am
+Last Modified: Wednesday, April 28th 2021, 12:28:36 pm
 Modified By: Dmitry Kislov
 -----
 Copyright (c) 2021
@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import (List, Any, Tuple, Callable, Union, TypeVar, Generic,
                     Optional)
 from copy import deepcopy
+
 
 AG_co = TypeVar('AG_co', covariant=True)
 
@@ -108,8 +109,8 @@ class AbstractConfig(ABC):
     # in history service attribute; New randomly generated phenotypes aren't
     # included to the population, if its novelty value is already exists in
     # history attribute.
-    novelty_function: Callable[['AbstractPhenotype', List[Any]],
-                               float] = lambda *x: 1.0
+    novelty_function: Optional[Callable[[AP_Type, List[Any]],
+                               float]] = lambda *x: 1.0
 
     # It is expected to be computed for current phenotype, taking
     # into account all phenotypes in the population.
@@ -117,14 +118,14 @@ class AbstractConfig(ABC):
     # during process of evolution.
     # By default it is always False (so no phenotypes will be included
     # into population); one should redefine this function to work with cgp.
-    select_criterion: Callable[[
-            'AbstractPhenotype',
-            List['AbstractPhenotype'],
-            List[Any]], bool
+    select_criterion: Optional[Callable[[
+            AP_Type,
+            List[AP_Type],
+            List[Any]], bool]
     ] = lambda *x: False
 
     # If True, evlution process stops.
-    stop_criterion: Optional[Callable[['AbstractPhenotype', List[Any]],
+    stop_criterion: Optional[Callable[[AP_Type, List[Any]],
                                       bool]] = None
 
     # The metric function used to estimate the quality of cgp-evolution.
@@ -209,7 +210,7 @@ class AbstractPhenotype(ABC, Generic[AG_co]):
 AP_Type = TypeVar('AP_Type', bound=AbstractPhenotype)
 
 
-class AbstractEvolution(ABC):
+class AbstractEvolution(ABC, Generic[AP_Type]):
 
     @abstractmethod
     def get_random_phenotype(self) -> AP_Type:
