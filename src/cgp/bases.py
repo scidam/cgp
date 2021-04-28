@@ -5,7 +5,7 @@ Created Date: Sunday March 28th 2021
 Author: Dmitry Kislov
 E-mail: kislov@easydan.com
 -----
-Last Modified: Wednesday, April 28th 2021, 10:39:22 am
+Last Modified: Wednesday, April 28th 2021, 11:02:25 am
 Modified By: Dmitry Kislov
 -----
 Copyright (c) 2021
@@ -203,4 +203,59 @@ class AbstractPhenotype(ABC, Generic[AG_co]):
 
     @abstractmethod
     def random_init(self) -> None:
+        ...
+
+
+AP_Type = TypeVar('AP_Type', bound=AbstractPhenotype)
+
+
+class AbstractEvolution(ABC):
+
+    @abstractmethod
+    def get_random_phenotype(self) -> AP_Type:
+        ...
+
+    @abstractmethod
+    def initialize_population(self) -> None:
+        ...
+
+    @abstractmethod
+    def crossover(
+        self,
+        g1: AP_Type,
+        g2: AP_Type,
+        cutoff: int = 0
+    ) -> List[AP_Type]:
+        ...
+
+    @abstractmethod
+    def select(self) -> List[AP_Type]:
+        ...
+
+    @abstractmethod
+    def stop_condition(self) -> bool:
+        ...
+
+    @abstractmethod
+    def extend_if_novel(self, ext: List[AP_Type]) -> int:
+        ...
+
+    @abstractmethod
+    def append_if_novel(self, phenotype: AP_Type) -> bool:
+        ...
+
+    @abstractmethod
+    def append_to_history(self, phenotypes: List[AP_Type]) -> None:
+        ...
+
+    @abstractmethod
+    def rectify_population(self) -> None:
+        ...
+
+    @abstractmethod
+    def run(self, nmax: int = 100) -> Tuple[AP_Type, Any]:
+        ...
+
+    @abstractmethod
+    def get_best_solution(self) -> Tuple[AP_Type, float]:
         ...
