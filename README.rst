@@ -3,19 +3,54 @@ cgp
 ===
 
 
-Add a short description here!
+Simple implementation of Cartesian Genetic Programming approach.
+The core CGP classes doesn't depend on any third party libraries
+and uses pure Python loops for evolution (it can be slow, when solving
+most of applied problems).
 
 
-Description
-===========
+Installation
+============
 
-A longer description of your project goes here...
+.. code-block:: bash
+
+    git clone https://github.com/scidam/cgp.git
 
 
-.. _pyscaffold-notes:
+Testing
+=======
 
-Note
-====
+`pytest` and `pytest-cov` should be installed to run tests.
 
-This project has been set up using PyScaffold 4.0.1. For details and usage
-information on PyScaffold see https://pyscaffold.org/.
+
+.. code-block:: bash
+
+    cd cgp
+    pytest
+
+
+
+Run examples
+============
+
+Run `pi` approximation example:
+
+.. code-block:: bash
+
+    cd src
+    python -m examples.example_pi
+
+
+Run symbolic regression example:
+
+.. code-block:: bash
+
+    cd src
+    python -m examples.example_sym
+
+
+
+Author
+------
+
+    Dmitry Kislov <kislov@easydan.com>
