@@ -5,29 +5,24 @@ Created Date: Thursday April 1st 2021
 Author: Dmitry Kislov
 E-mail: kislov@easydan.com
 -----
-Last Modified: Thursday, April 29th 2021, 9:15:32 am
+Last Modified: Thursday, April 29th 2021, 9:38:34 am
 Modified By: Dmitry Kislov
 -----
 Copyright (c) 2021
 """
 
 
-
-from cgp.model import (GridMixin, Config, FunctionNode, InputNode, OutputNode,
-                       Phenotype, Evolution)
+from cgp.model import Config, Phenotype, Evolution
 from cgp.utils import CGPPlotter
-from math import pi
 from typing import Optional, List, Any
 import numpy as np
-import time
-from collections import Counter
-import sys
 
 
 # ------------- Symbolic regression problem ----------------
 @np.vectorize
 def unknown_function(x):
     return x * (x - 1) - 1
+
 
 accuracy = 1.0e-5
 num_points = 20
@@ -53,9 +48,6 @@ def stop_criterion(
     return metric(phenotype, inputs) < eps
 
 
-
-# Here we choose only 25% among all phenotypes to include to the next
-# population
 def select_criterion(
     phenotype: Phenotype,
     population: List[Phenotype],
